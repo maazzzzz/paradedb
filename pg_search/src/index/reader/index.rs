@@ -33,7 +33,9 @@ use crate::schema::SearchIndexSchema;
 use std::ptr::NonNull;
 
 use anyhow::Result;
-use tantivy::aggregation::DistributedAggregationCollector;
+use tantivy::aggregation::{
+    intermediate_agg_result::IntermediateAggregationResults, DistributedAggregationCollector,
+};
 use tantivy::collector::{
     Collector, Feature, FieldFeature, ScoreFeature, SegmentCollector, TopDocs, TopOrderable,
 };
@@ -81,17 +83,22 @@ type ErasedFeature = Arc<dyn Feature<Output = OwnedValue, SegmentOutput = Option
 pub struct TopNSearchResults {
     results_original_len: usize,
     results: std::vec::IntoIter<(SearchIndexScore, DocAddress)>,
+    aggregate_results: Option<IntermediateAggregationResults>,
 }
 
 impl TopNSearchResults {
     pub fn empty() -> Self {
-        Self::new(vec![])
+        Self::new(vec![], None)
     }
 
-    fn new(results: Vec<(SearchIndexScore, DocAddress)>) -> Self {
+    fn new(
+        results: Vec<(SearchIndexScore, DocAddress)>,
+        aggregate_results: Option<IntermediateAggregationResults>,
+    ) -> Self {
         Self {
             results_original_len: results.len(),
             results: results.into_iter(),
+            aggregate_results,
         }
     }
 
@@ -121,6 +128,7 @@ impl TopNSearchResults {
                     (scored, doc_address)
                 })
                 .collect(),
+            None,
         )
     }
 
@@ -520,6 +528,7 @@ impl SearchIndexReader {
                 .skip(offset)
                 .take(n)
                 .collect(),
+            None,
         )
     }
 
