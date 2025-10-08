@@ -83,7 +83,7 @@ type ErasedFeature = Arc<dyn Feature<Output = OwnedValue, SegmentOutput = Option
 pub struct TopNSearchResults {
     results_original_len: usize,
     results: std::vec::IntoIter<(SearchIndexScore, DocAddress)>,
-    aggregate_results: Option<IntermediateAggregationResults>,
+    aggregation_results: Option<IntermediateAggregationResults>,
 }
 
 impl TopNSearchResults {
@@ -93,18 +93,19 @@ impl TopNSearchResults {
 
     fn new(
         results: Vec<(SearchIndexScore, DocAddress)>,
-        aggregate_results: Option<IntermediateAggregationResults>,
+        aggregation_results: Option<IntermediateAggregationResults>,
     ) -> Self {
         Self {
             results_original_len: results.len(),
             results: results.into_iter(),
-            aggregate_results,
+            aggregation_results,
         }
     }
 
     fn new_for_score(
         searcher: &Searcher,
         results: impl IntoIterator<Item = (Score, DocAddress)>,
+        aggregation_results: Option<IntermediateAggregationResults>,
     ) -> Self {
         // TODO: Execute batch lookups for ctids?
         let mut ff_lookup = FastFieldCache::default();
@@ -128,7 +129,7 @@ impl TopNSearchResults {
                     (scored, doc_address)
                 })
                 .collect(),
-            None,
+            aggregation_results,
         )
     }
 
@@ -139,13 +140,18 @@ impl TopNSearchResults {
     /// query), similar to what we do in fast-fields execution.
     fn new_for_discarded_field<T>(
         searcher: &Searcher,
-        results: impl IntoIterator<Item = ((Option<T>, Option<Score>), DocAddress)>,
+        results: (
+            Vec<((Option<T>, Option<Score>), DocAddress)>,
+            Option<IntermediateAggregationResults>,
+        ),
     ) -> Self {
+        let (results, aggregation_results) = results;
         Self::new_for_score(
             searcher,
             results
                 .into_iter()
                 .map(|((_, score), doc)| (score.unwrap_or(1.0), doc)),
+            aggregation_results,
         )
     }
 
@@ -642,19 +648,19 @@ impl SearchIndexReader {
                 direction,
             } if !erased_features.is_empty() => {
                 // If we've directly sorted on the score, then we have it available here.
+                let (top_docs, aggregation_results) = self.top_in_segments(
+                    segment_ids,
+                    ScoreFeature,
+                    *direction,
+                    erased_features,
+                    n,
+                    offset,
+                    aggregation_collector,
+                );
                 TopNSearchResults::new_for_score(
                     &self.searcher,
-                    self.top_in_segments(
-                        segment_ids,
-                        ScoreFeature,
-                        *direction,
-                        erased_features,
-                        n,
-                        offset,
-                        aggregation_collector,
-                    )
-                    .into_iter()
-                    .map(|((f, _), doc)| (f, doc)),
+                    top_docs.into_iter().map(|((f, _), doc)| (f, doc)),
+                    aggregation_results,
                 )
             }
             OrderByInfo {
@@ -698,23 +704,31 @@ impl SearchIndexReader {
         n: usize,
         offset: usize,
         aggregation_collector: Option<DistributedAggregationCollector>,
-    ) -> Vec<((F::Output, Option<Score>), DocAddress)> {
+    ) -> (
+        Vec<((F::Output, Option<Score>), DocAddress)>,
+        Option<IntermediateAggregationResults>,
+    ) {
         // if last erased feature is score, then we need to return the score
         match erased_features.len() {
-            0 => self
-                .top_for_orderable_in_segments(
+            0 => {
+                let (top_docs, aggregation_results) = self.top_for_orderable_in_segments(
                     segment_ids,
                     ((first_feature, first_sortdir.into()),),
                     n,
                     offset,
                     aggregation_collector,
+                );
+                (
+                    top_docs
+                        .into_iter()
+                        .map(|((f,), doc)| ((f, None), doc))
+                        .collect(),
+                    aggregation_results,
                 )
-                .into_iter()
-                .map(|((f,), doc)| ((f, None), doc))
-                .collect(),
+            }
             1 => {
                 let erased_feature = erased_features.pop().unwrap();
-                self.top_for_orderable_in_segments(
+                let (top_docs, aggregation_results) = self.top_for_orderable_in_segments(
                     segment_ids,
                     (
                         (first_feature, first_sortdir.into()),
@@ -723,18 +737,23 @@ impl SearchIndexReader {
                     n,
                     offset,
                     aggregation_collector,
+                );
+
+                (
+                    top_docs
+                        .into_iter()
+                        .map(|((f, erased1), doc)| {
+                            let maybe_score = erased_features.try_get_score(&[erased1]);
+                            ((f, maybe_score), doc)
+                        })
+                        .collect(),
+                    aggregation_results,
                 )
-                .into_iter()
-                .map(|((f, erased1), doc)| {
-                    let maybe_score = erased_features.try_get_score(&[erased1]);
-                    ((f, maybe_score), doc)
-                })
-                .collect()
             }
             2 => {
                 let erased_feature2 = erased_features.pop().unwrap();
                 let erased_feature1 = erased_features.pop().unwrap();
-                self.top_for_orderable_in_segments(
+                let (top_docs, aggregation_results) = self.top_for_orderable_in_segments(
                     segment_ids,
                     (
                         (first_feature, first_sortdir.into()),
@@ -744,13 +763,18 @@ impl SearchIndexReader {
                     n,
                     offset,
                     aggregation_collector,
+                );
+
+                (
+                    top_docs
+                        .into_iter()
+                        .map(|((f, erased1, erased2), doc)| {
+                            let maybe_score = erased_features.try_get_score(&[erased1, erased2]);
+                            ((f, maybe_score), doc)
+                        })
+                        .collect(),
+                    aggregation_results,
                 )
-                .into_iter()
-                .map(|((f, erased1, erased2), doc)| {
-                    let maybe_score = erased_features.try_get_score(&[erased1, erased2]);
-                    ((f, maybe_score), doc)
-                })
-                .collect()
             }
             x => {
                 if erased_features.score_index() == Some(x - 1) {
@@ -776,7 +800,10 @@ impl SearchIndexReader {
         n: usize,
         offset: usize,
         aggregation_collector: Option<DistributedAggregationCollector>,
-    ) -> Vec<(O::Output, DocAddress)> {
+    ) -> (
+        Vec<(O::Output, DocAddress)>,
+        Option<IntermediateAggregationResults>,
+    ) {
         let top_docs_collector = TopDocs::with_limit(n)
             .and_offset(offset)
             .order_by(orderable);
@@ -788,15 +815,16 @@ impl SearchIndexReader {
         if let Some(aggregation_collector) = aggregation_collector {
             let collector = (top_docs_collector, aggregation_collector);
             let fruits = self.collect_segments(segment_ids, &collector, weight.as_ref());
-            let (top_docs, _aggregation_results) = collector
+            let (top_docs, aggregation_results) = collector
                 .merge_fruits(fruits)
                 .expect("should be able to merge top-n in segment");
-            top_docs
+            (top_docs, Some(aggregation_results))
         } else {
-            let top_docs = self.collect_segments(segment_ids, &top_docs_collector, weight.as_ref());
-            top_docs_collector
-                .merge_fruits(top_docs)
-                .expect("should be able to merge top-n in segments")
+            let fruits = self.collect_segments(segment_ids, &top_docs_collector, weight.as_ref());
+            let top_docs = top_docs_collector
+                .merge_fruits(fruits)
+                .expect("should be able to merge top-n in segments");
+            (top_docs, None)
         }
     }
 
@@ -831,19 +859,22 @@ impl SearchIndexReader {
                     })
                     .expect("creating a Weight from a Query should not fail");
 
-                let top_docs = if let Some(aggregation_collector) = aggregation_collector {
+                let (top_docs, aggregation_results) = if let Some(aggregation_collector) =
+                    aggregation_collector
+                {
                     let collector = (top_docs_collector, aggregation_collector);
                     let fruits = self.collect_segments(segment_ids, &collector, weight.as_ref());
-                    let (top_docs, _aggregation_results) = collector
+                    let (top_docs, aggregation_results) = collector
                         .merge_fruits(fruits)
                         .expect("should be able to merge top-n in segment");
-                    top_docs
+                    (top_docs, Some(aggregation_results))
                 } else {
-                    let top_docs =
+                    let fruits =
                         self.collect_segments(segment_ids, &top_docs_collector, weight.as_ref());
-                    top_docs_collector
-                        .merge_fruits(top_docs)
-                        .expect("should be able to merge top-n in segment")
+                    let top_docs = top_docs_collector
+                        .merge_fruits(fruits)
+                        .expect("should be able to merge top-n in segment");
+                    (top_docs, None)
                 };
 
                 TopNSearchResults::new_for_score(
@@ -851,6 +882,7 @@ impl SearchIndexReader {
                     top_docs
                         .into_iter()
                         .map(|(score, doc_address)| (score.score, doc_address)),
+                    aggregation_results,
                 )
             }
 
@@ -865,22 +897,25 @@ impl SearchIndexReader {
                     })
                     .expect("creating a Weight from a Query should not fail");
 
-                let top_docs = if let Some(aggregation_collector) = aggregation_collector {
+                let (top_docs, aggregation_results) = if let Some(aggregation_collector) =
+                    aggregation_collector
+                {
                     let collector = (top_docs_collector, aggregation_collector);
                     let fruits = self.collect_segments(segment_ids, &collector, weight.as_ref());
-                    let (top_docs, _aggregation_results) = collector
+                    let (top_docs, aggregation_results) = collector
                         .merge_fruits(fruits)
                         .expect("should be able to merge top-n in segment");
-                    top_docs
+                    (top_docs, Some(aggregation_results))
                 } else {
-                    let top_docs =
+                    let fruits =
                         self.collect_segments(segment_ids, &top_docs_collector, weight.as_ref());
-                    top_docs_collector
-                        .merge_fruits(top_docs)
-                        .expect("should be able to merge top-n in segment")
+                    let top_docs = top_docs_collector
+                        .merge_fruits(fruits)
+                        .expect("should be able to merge top-n in segment");
+                    (top_docs, None)
                 };
 
-                TopNSearchResults::new_for_score(&self.searcher, top_docs)
+                TopNSearchResults::new_for_score(&self.searcher, top_docs, aggregation_results)
             }
         }
     }
