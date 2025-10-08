@@ -175,16 +175,33 @@ impl ExecMethod for TopNScanExecState {
             (self.limit as f64 * self.scale_factor).max(self.chunk_size as f64) as usize;
         let next_offset = self.offset + local_limit;
 
-        self.search_results = state
-            .search_reader
-            .as_ref()
-            .unwrap()
-            .search_top_n_in_segments(
-                self.segments_to_query(state.search_reader.as_ref().unwrap(), state.parallel_state),
-                self.orderby_info.as_ref(),
-                local_limit,
-                self.offset,
-            );
+        self.search_results = if let Some(orderby_info) = self.orderby_info.as_ref() {
+            self.search_reader
+                .as_ref()
+                .unwrap()
+                .search_top_n_in_segments(
+                    self.segments_to_query(
+                        state.search_reader.as_ref().unwrap(),
+                        state.parallel_state,
+                    ),
+                    orderby_info,
+                    local_limit,
+                    self.offset,
+                    None,
+                )
+        } else {
+            self.search_reader
+                .as_ref()
+                .unwrap()
+                .search_top_n_unordered_in_segments(
+                    self.segments_to_query(
+                        state.search_reader.as_ref().unwrap(),
+                        state.parallel_state,
+                    ),
+                    local_limit,
+                    self.offset,
+                )
+        };
 
         // Record the offset to start from for the next query.
         self.offset = next_offset;
