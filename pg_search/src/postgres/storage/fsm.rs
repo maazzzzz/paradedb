@@ -1172,7 +1172,7 @@ pub mod v2 {
                 pg_sys::RowExclusiveLock as pg_sys::LOCKMODE,
             );
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1224,7 +1224,7 @@ pub mod v2 {
                 pg_sys::RowExclusiveLock as pg_sys::LOCKMODE,
             );
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1258,7 +1258,7 @@ pub mod v2 {
                 pg_sys::RowExclusiveLock as pg_sys::LOCKMODE,
             );
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1290,7 +1290,7 @@ pub mod v2 {
                 pg_sys::RowExclusiveLock as pg_sys::LOCKMODE,
             );
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1325,7 +1325,7 @@ pub mod v2 {
                 pg_sys::RowExclusiveLock as pg_sys::LOCKMODE,
             );
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1379,7 +1379,7 @@ pub mod v2 {
                 pg_sys::RowExclusiveLock as pg_sys::LOCKMODE,
             );
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1451,7 +1451,7 @@ pub mod v2 {
                 pg_sys::RowExclusiveLock as pg_sys::LOCKMODE,
             );
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1513,7 +1513,7 @@ pub mod v2 {
                 pg_sys::RowExclusiveLock as pg_sys::LOCKMODE,
             );
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1560,7 +1560,7 @@ pub mod v2 {
                 pg_sys::RowExclusiveLock as pg_sys::LOCKMODE,
             );
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1625,7 +1625,7 @@ pub mod v2 {
                 PgSearchRelation::with_lock(index_oid, pg_sys::AccessShareLock as pg_sys::LOCKMODE);
             indexrel.set_is_create_index();
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1670,7 +1670,7 @@ pub mod v2 {
                 pg_sys::RowExclusiveLock as pg_sys::LOCKMODE,
             );
 
-            let mut bman = BufferManager::new(&indexrel);
+            let mut bman = BufferManager::new(&indexrel, std::ptr::null_mut());
             let metapage = MetaPage::open(&indexrel);
             let mut fsm = V2FSM::open(metapage.fsm());
 
@@ -1829,7 +1829,7 @@ unsafe fn fsm_info(
         PgSearchRelation::with_lock(index.oid(), pg_sys::AccessShareLock as pg_sys::LOCKMODE);
 
     let meta = MetaPage::open(&index);
-    let bman = BufferManager::new(&index);
+    let bman = BufferManager::new(&index, std::ptr::null_mut());
 
     let root = bman.get_buffer(meta.fsm());
     let page = root.page();
@@ -1878,7 +1878,7 @@ unsafe fn fsm_size(index: PgRelation) -> i64 {
         PgSearchRelation::with_lock(index.oid(), pg_sys::AccessShareLock as pg_sys::LOCKMODE);
 
     let meta = MetaPage::open(&index);
-    let bman = BufferManager::new(&index);
+    let bman = BufferManager::new(&index, std::ptr::null_mut());
 
     let root = bman.get_buffer(meta.fsm());
     let page = root.page();

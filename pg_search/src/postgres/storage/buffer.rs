@@ -728,17 +728,22 @@ impl PageHeaderMethods for pg_sys::PageHeaderData {
     }
 }
 
+unsafe impl Send for BufferManager {}
+unsafe impl Sync for BufferManager {}
+
 #[derive(Clone, Debug)]
 pub struct BufferManager {
     rbufacc: RelationBufferAccess,
     fsm_blockno: Option<pg_sys::BlockNumber>,
+    read_strategy: pg_sys::BufferAccessStrategy,
 }
 
 impl BufferManager {
-    pub fn new(rel: &PgSearchRelation) -> Self {
+    pub fn new(rel: &PgSearchRelation, read_strategy: pg_sys::BufferAccessStrategy) -> Self {
         Self {
             rbufacc: RelationBufferAccess::open(rel),
             fsm_blockno: None,
+            read_strategy,
         }
     }
 
@@ -848,10 +853,12 @@ impl BufferManager {
     }
 
     pub fn get_buffer(&self, blockno: pg_sys::BlockNumber) -> Buffer {
-        let pg_buffer = self
-            .rbufacc
-            .get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_SHARE));
-
+        let pg_buffer = self.rbufacc.get_buffer_extended(
+            blockno,
+            self.read_strategy,
+            pg_sys::ReadBufferMode::RBM_NORMAL,
+            Some(pg_sys::BUFFER_LOCK_SHARE),
+        );
         block_tracker::track!(Read, blockno);
         Buffer::new(pg_buffer)
     }

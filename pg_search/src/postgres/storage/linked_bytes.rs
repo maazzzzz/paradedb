@@ -208,9 +208,13 @@ impl LinkedList for LinkedBytesList {
 }
 
 impl LinkedBytesList {
-    pub fn open(rel: &PgSearchRelation, header_blockno: pg_sys::BlockNumber) -> Self {
+    pub fn open(
+        rel: &PgSearchRelation,
+        header_blockno: pg_sys::BlockNumber,
+        read_strategy: pg_sys::BufferAccessStrategy,
+    ) -> Self {
         Self {
-            bman: BufferManager::new(rel),
+            bman: BufferManager::new(rel, read_strategy),
             header_blockno,
             blocklist_reader: Default::default(),
             read_cache: Mutex::new(VecDeque::with_capacity(BLOCK_CACHE_SIZE)),
@@ -240,7 +244,7 @@ impl LinkedBytesList {
     /// Create a new [`LinkedBytesList`] in the specified `indexrel`'s block storage.  This method
     /// will attempt to create the initial block structure using recycled blocks from the [`FreeSpaceManager`].
     pub fn create_with_fsm(rel: &PgSearchRelation) -> Self {
-        let mut bman = BufferManager::new(rel);
+        let mut bman = BufferManager::new(rel, std::ptr::null_mut());
         let mut buffers = bman.new_buffers(2);
 
         let mut header_buffer = buffers.next().unwrap();
@@ -457,7 +461,7 @@ mod tests {
         };
 
         // Test read from already created linked list
-        let linked_list = LinkedBytesList::open(&indexrel, start_blockno);
+        let linked_list = LinkedBytesList::open(&indexrel, start_blockno, std::ptr::null_mut());
         let read_bytes = linked_list.read_all();
         assert_eq!(bytes, read_bytes);
     }

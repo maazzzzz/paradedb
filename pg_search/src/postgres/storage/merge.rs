@@ -49,7 +49,7 @@ pub struct MergeLock {
 impl MergeLock {
     /// This is a blocking operation to acquire an exclusive lock on the merge lock buffer
     pub unsafe fn acquire(indexrel: &PgSearchRelation, block_number: pg_sys::BlockNumber) -> Self {
-        let mut bman = BufferManager::new(indexrel);
+        let mut bman = BufferManager::new(indexrel, std::ptr::null_mut());
         let mut buffer = bman.get_buffer_mut(block_number);
         let mut page = buffer.page_mut();
         let metadata = page.contents_mut::<MergeLockData>();
@@ -123,7 +123,7 @@ impl VacuumList {
         let mut segment_ids = segment_ids.collect::<Vec<_>>();
         segment_ids.sort();
 
-        let mut bman = BufferManager::new(&self.indexrel);
+        let mut bman = BufferManager::new(&self.indexrel, std::ptr::null_mut());
         let mut buffer = bman.get_buffer_mut(self.start_block_number);
         let mut page = buffer.page_mut();
         let mut contents = page.contents_mut::<VacuumListData>();
@@ -166,7 +166,7 @@ impl VacuumList {
 
         let mut segment_ids = HashSet::default();
 
-        let bman = BufferManager::new(&self.indexrel);
+        let bman = BufferManager::new(&self.indexrel, std::ptr::null_mut());
         let mut buffer = bman.get_buffer(self.start_block_number);
         loop {
             let page = buffer.page();
@@ -197,7 +197,7 @@ impl VacuumList {
     pub fn is_ambulkdelete_running(&self) -> bool {
         // an `ambulkdelete()` is running if we can't acquire the sentinel block for cleanup
         // it means ambulkdelete() is holding a pin on that buffer
-        let mut bman = BufferManager::new(&self.indexrel);
+        let mut bman = BufferManager::new(&self.indexrel, std::ptr::null_mut());
         bman.get_buffer_for_cleanup_conditional(self.ambulkdelete_sentinel)
             .is_none()
     }
@@ -258,7 +258,11 @@ impl MVCCEntry for MergeEntry {
 
 impl MergeEntry {
     pub unsafe fn segment_ids(&self, indexrel: &PgSearchRelation) -> Vec<SegmentId> {
-        let bytes = LinkedBytesList::open(indexrel, self.segment_ids_start_blockno);
+        let bytes = LinkedBytesList::open(
+            indexrel,
+            self.segment_ids_start_blockno,
+            std::ptr::null_mut(),
+        );
         let bytes = bytes.read_all();
         bytes
             .chunks(size_of::<SegmentIdBytes>())
@@ -276,7 +280,7 @@ pub struct MergeList {
 
 impl MergeList {
     pub fn open(entries: LinkedItemList<MergeEntry>, indexrel: &PgSearchRelation) -> Self {
-        let bman = BufferManager::new(indexrel);
+        let bman = BufferManager::new(indexrel, std::ptr::null_mut());
         Self { entries, bman }
     }
 
@@ -295,7 +299,12 @@ impl MergeList {
         self.bman.fsm().extend(
             &mut self.bman,
             recycled_entries.into_iter().flat_map(move |entry| {
-                LinkedBytesList::open(&indexrel, entry.segment_ids_start_blockno).freeable_blocks()
+                LinkedBytesList::open(
+                    &indexrel,
+                    entry.segment_ids_start_blockno,
+                    std::ptr::null_mut(),
+                )
+                .freeable_blocks()
             }),
         );
     }
@@ -347,6 +356,7 @@ impl MergeList {
         LinkedBytesList::open(
             self.bman.buffer_access().rel(),
             removed_entry.segment_ids_start_blockno,
+            std::ptr::null_mut(),
         )
         .return_to_fsm();
         Ok(removed_entry)

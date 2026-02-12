@@ -71,8 +71,12 @@ pub enum MvccSatisfies {
 }
 
 impl MvccSatisfies {
-    pub fn directory(self, index_relation: &PgSearchRelation) -> MVCCDirectory {
-        MVCCDirectory::with_mvcc_style(index_relation, self)
+    pub fn directory(
+        self,
+        index_relation: &PgSearchRelation,
+        read_strategy: pg_sys::BufferAccessStrategy,
+    ) -> MVCCDirectory {
+        MVCCDirectory::with_mvcc_style(index_relation, self, read_strategy)
     }
 }
 
@@ -113,7 +117,7 @@ pub struct MVCCDirectory {
     //
     indexrel: PgSearchRelation,
     mvcc_style: Arc<MvccSatisfies>,
-
+    read_strategy: pg_sys::BufferAccessStrategy,
     // keep a cache of readers behind an Arc<Mutex<_>> so that if/when this MVCCDirectory is
     // cloned, we don't lose all the work we did originally creating the FileHandler impls.  And
     // it's cloned a lot!
@@ -139,14 +143,22 @@ impl MVCCDirectory {
         index_relation: &PgSearchRelation,
         segment_ids: HashSet<SegmentId>,
     ) -> Self {
-        Self::with_mvcc_style(index_relation, MvccSatisfies::ParallelWorker(segment_ids))
+        Self::with_mvcc_style(
+            index_relation,
+            MvccSatisfies::ParallelWorker(segment_ids),
+            std::ptr::null_mut(),
+        )
     }
 
-    pub fn with_mvcc_style(index_relation: &PgSearchRelation, mvcc_style: MvccSatisfies) -> Self {
+    pub fn with_mvcc_style(
+        index_relation: &PgSearchRelation,
+        mvcc_style: MvccSatisfies,
+        read_strategy: pg_sys::BufferAccessStrategy,
+    ) -> Self {
         Self {
             indexrel: Clone::clone(index_relation),
             mvcc_style: Arc::new(mvcc_style),
-
+            read_strategy,
             readers: Default::default(),
             new_files: Default::default(),
             loaded_metas: Default::default(),
@@ -192,7 +204,7 @@ impl MVCCDirectory {
                     .file_entry(uuid_string, path)
                     .expect("No such path for {entry:?}: {path:?}");
                 Ok(Arc::new(unsafe {
-                    SegmentComponentReader::new(&self.indexrel, file_entry)
+                    SegmentComponentReader::new(&self.indexrel, file_entry, self.read_strategy)
                 }))
             }
             LoadedSegmentMetaEntry::Memory {
@@ -306,7 +318,11 @@ impl Directory for MVCCDirectory {
                         };
                     Ok(vacant
                         .insert(Arc::new(unsafe {
-                            SegmentComponentReader::new(&self.indexrel, file_entry)
+                            SegmentComponentReader::new(
+                                &self.indexrel,
+                                file_entry,
+                                self.read_strategy,
+                            )
                         }))
                         .clone())
                 }

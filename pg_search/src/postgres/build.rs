@@ -297,7 +297,7 @@ fn create_index(index_relation: &PgSearchRelation) -> Result<()> {
     );
 
     let schema = builder.build();
-    let directory = MvccSatisfies::Snapshot.directory(index_relation);
+    let directory = MvccSatisfies::Snapshot.directory(index_relation, std::ptr::null_mut());
 
     // Configure sort_by for segment sorting
     let sort_by_field = SearchIndexSchema::build_sort_by_field(&options.sort_by(), &schema);

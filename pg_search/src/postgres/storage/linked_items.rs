@@ -88,7 +88,7 @@ impl<T: From<PgItem> + Into<PgItem> + Debug + Clone> LinkedItemList<T> {
     pub fn open(indexrel: &PgSearchRelation, header_blockno: pg_sys::BlockNumber) -> Self {
         Self {
             header_blockno,
-            bman: BufferManager::new(indexrel),
+            bman: BufferManager::new(indexrel, std::ptr::null_mut()),
             _marker: std::marker::PhantomData,
         }
     }
@@ -132,7 +132,7 @@ impl<T: From<PgItem> + Into<PgItem> + Debug + Clone> LinkedItemList<T> {
     }
 
     fn create_without_start_page(indexrel: &PgSearchRelation) -> (Self, BufferMut) {
-        let mut bman = BufferManager::new(indexrel);
+        let mut bman = BufferManager::new(indexrel, std::ptr::null_mut());
 
         let mut header_buffer = bman.new_buffer();
         let header_blockno = header_buffer.number();
@@ -898,7 +898,8 @@ mod tests {
     }
 
     fn make_fake_postings(indexrel: &PgSearchRelation) -> FileEntry {
-        let mut postings_file_block = BufferManager::new(indexrel).new_buffer();
+        let mut postings_file_block =
+            BufferManager::new(indexrel, std::ptr::null_mut()).new_buffer();
         postings_file_block.init_page();
         FileEntry {
             starting_block: postings_file_block.number(),

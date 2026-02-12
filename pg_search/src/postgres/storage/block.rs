@@ -669,12 +669,15 @@ impl SegmentMetaEntry {
             SegmentMetaEntryContent::Immutable(ref content) if self.is_orphaned_delete() => {
                 // This is a "fake" `DeleteEntry`: free the blocks for the old `DeleteEntry` only
                 let block = content.delete.as_ref().unwrap().file_entry.starting_block;
-                Box::new(LinkedBytesList::open(indexrel, block).freeable_blocks())
+                Box::new(
+                    LinkedBytesList::open(indexrel, block, std::ptr::null_mut()).freeable_blocks(),
+                )
             }
             SegmentMetaEntryContent::Immutable(ref content) => {
                 // Free all files.
                 Box::new(content.file_entries().flat_map(move |(file_entry, _)| {
-                    LinkedBytesList::open(indexrel, file_entry.starting_block).freeable_blocks()
+                    LinkedBytesList::open(indexrel, file_entry.starting_block, std::ptr::null_mut())
+                        .freeable_blocks()
                 }))
             }
             SegmentMetaEntryContent::Mutable(ref content) => {

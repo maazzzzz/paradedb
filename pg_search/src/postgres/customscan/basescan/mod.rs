@@ -588,7 +588,8 @@ impl CustomScan for BaseScan {
             let mut custom_private = PrivateData::default();
 
             let segment_count = {
-                let directory = MvccSatisfies::LargestSegment.directory(&bm25_index);
+                let directory =
+                    MvccSatisfies::LargestSegment.directory(&bm25_index, std::ptr::null_mut());
                 let segment_count = directory.total_segment_count(); // return value only valid after the index has been opened
                 Index::open(directory).expect("custom_scan: should be able to open index");
                 segment_count.load(Ordering::Relaxed)

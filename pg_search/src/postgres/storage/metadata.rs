@@ -125,7 +125,7 @@ impl MetaPage {
             .report(PgLogLevel::ERROR);
         }
 
-        let mut bman = BufferManager::new(indexrel);
+        let mut bman = BufferManager::new(indexrel, std::ptr::null_mut());
         let buffer = bman.get_buffer(METAPAGE);
         let page = buffer.page();
         let metadata = page.contents::<MetaPageData>();
@@ -299,7 +299,11 @@ impl MetaPage {
         } else {
             self.data.schema_start
         };
-        LinkedBytesList::open(self.bman.buffer_access().rel(), blockno)
+        LinkedBytesList::open(
+            self.bman.buffer_access().rel(),
+            blockno,
+            std::ptr::null_mut(),
+        )
     }
 
     pub fn settings_bytes(&self) -> LinkedBytesList {
@@ -308,7 +312,11 @@ impl MetaPage {
         } else {
             self.data.settings_start
         };
-        LinkedBytesList::open(self.bman.buffer_access().rel(), blockno)
+        LinkedBytesList::open(
+            self.bman.buffer_access().rel(),
+            blockno,
+            std::ptr::null_mut(),
+        )
     }
 
     pub fn segment_metas(&self) -> LinkedItemList<SegmentMetaEntry> {

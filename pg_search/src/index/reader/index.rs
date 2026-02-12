@@ -355,7 +355,7 @@ impl SearchIndexReader {
         // a pinned but unlocked buffer.
         let cleanup_lock = MetaPage::open(index_relation).cleanup_lock_pinned();
 
-        let directory = mvcc_style.directory(index_relation);
+        let directory = mvcc_style.directory(index_relation, std::ptr::null_mut());
         let mut index = Index::open(directory)?;
         let schema = index_relation.schema()?;
         setup_tokenizers(index_relation, &mut index)?;

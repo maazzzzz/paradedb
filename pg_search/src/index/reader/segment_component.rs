@@ -20,6 +20,7 @@ use crate::postgres::storage::block::FileEntry;
 
 use crate::postgres::storage::LinkedBytesList;
 use anyhow::Result;
+use pgrx::pg_sys;
 use std::io::Error;
 use std::ops::Range;
 use tantivy::directory::FileHandle;
@@ -33,8 +34,12 @@ pub struct SegmentComponentReader {
 }
 
 impl SegmentComponentReader {
-    pub unsafe fn new(indexrel: &PgSearchRelation, entry: FileEntry) -> Self {
-        let block_list = LinkedBytesList::open(indexrel, entry.starting_block);
+    pub unsafe fn new(
+        indexrel: &PgSearchRelation,
+        entry: FileEntry,
+        read_strategy: pg_sys::BufferAccessStrategy,
+    ) -> Self {
+        let block_list = LinkedBytesList::open(indexrel, entry.starting_block, read_strategy);
 
         Self { block_list, entry }
     }
@@ -93,7 +98,7 @@ mod tests {
         let file_entry = writer.file_entry();
         writer.terminate().unwrap();
 
-        let reader = SegmentComponentReader::new(&indexrel, file_entry);
+        let reader = SegmentComponentReader::new(&indexrel, file_entry, std::ptr::null_mut());
 
         assert_eq!(reader.len(), 100_000);
         assert_eq!(

@@ -80,7 +80,7 @@ impl VisibilityChecker {
                 snapshot,
                 tid: pg_sys::ItemPointerData::default(),
                 heaprel: Clone::clone(heaprel),
-                bman: BufferManager::new(heaprel),
+                bman: BufferManager::new(heaprel, std::ptr::null_mut()),
                 vmbuff: pg_sys::InvalidBuffer as pg_sys::Buffer,
                 blockvis: (pg_sys::InvalidBlockNumber, false),
                 heap_tuple_check_count: 0,

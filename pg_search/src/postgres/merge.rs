@@ -237,7 +237,9 @@ pub unsafe fn do_merge(
     let (needs_background_merge, largest_layer_size) =
         if layer_sizes.user_configured_background_layers() {
             let combined_layers = layer_sizes.combined();
-            let merger = SearchIndexMerger::open(MvccSatisfies::Mergeable.directory(index))?;
+            let merger = SearchIndexMerger::open(
+                MvccSatisfies::Mergeable.directory(index, std::ptr::null_mut()),
+            )?;
             let mut background_merge_policy = LayeredMergePolicy::new(combined_layers);
 
             background_merge_policy.set_mergeable_segment_entries(&metadata, &merge_lock, &merger);
@@ -387,8 +389,14 @@ unsafe fn merge_index(
     // before it decides to find the segments it should vacuum.  The reason is that it needs to see
     // the final merged segment, not the original segments that will be deleted
     let metadata = MetaPage::open(indexrel);
-    let merger = SearchIndexMerger::open(MvccSatisfies::Mergeable.directory(indexrel))
-        .expect("should be able to open merger");
+    let read_strategy = if is_background {
+        pg_sys::GetAccessStrategy(pg_sys::BufferAccessStrategyType::BAS_BULKREAD)
+    } else {
+        std::ptr::null_mut()
+    };
+    let merger =
+        SearchIndexMerger::open(MvccSatisfies::Mergeable.directory(indexrel, read_strategy))
+            .expect("should be able to open merger");
 
     // further reduce the set of segments that the LayeredMergePolicy will operate on by internally
     // simulating the process, allowing concurrent merges to consider segments we're not, only retaining
@@ -501,7 +509,7 @@ pub fn free_entries(
     freeable_entries: Vec<SegmentMetaEntry>,
     current_xid: pg_sys::FullTransactionId,
 ) {
-    let mut bman = BufferManager::new(indexrel);
+    let mut bman = BufferManager::new(indexrel, std::ptr::null_mut());
     bman.fsm().extend_with_when_recyclable(
         &mut bman,
         current_xid,
