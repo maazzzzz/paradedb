@@ -390,7 +390,7 @@ unsafe fn merge_index(
     // the final merged segment, not the original segments that will be deleted
     let metadata = MetaPage::open(indexrel);
     let read_strategy = if is_background {
-        pg_sys::GetAccessStrategy(pg_sys::BufferAccessStrategyType::BAS_BULKREAD)
+        pg_sys::GetAccessStrategy(pg_sys::BufferAccessStrategyType::BAS_VACUUM)
     } else {
         std::ptr::null_mut()
     };
